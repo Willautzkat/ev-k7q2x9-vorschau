@@ -8,3 +8,5 @@ Statische Startseite für eq-valent (Entwurf „Tiefgang v4“). Reines HTML, CS
 - `assets/` – Bilder (WebP) und lokal eingebundene Schriften
 
 Zum Ansehen den Ordner über einen lokalen Webserver öffnen, zum Beispiel `python3 -m http.server`. Direkt per Doppelklick geöffnet fehlen die WebGL-Effekte.
+
+Verbindungstest vom 27.11.2026
