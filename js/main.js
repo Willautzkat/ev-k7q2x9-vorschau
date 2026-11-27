@@ -625,7 +625,7 @@
 
   /* ---------- Hero: die Tilde als kleine Grafikkarten-Routine ----------
      Der Schatten ist ein eigenes, festes Bild. Im Ruhezustand lebt jedes Material auf seine Art:
-     Im Moos zieht Wind in Wellen durch die Büschel, durch das Fell geht derselbe Wind und lässt vor allem die Spitzen am Rand wehen, über das Gold läuft ein Lichtstreif,
+     Im Moos zieht Wind in Wellen durch die Büschel, durch das Fell geht derselbe Wind und lässt vor allem die Spitzen am Rand wehen, über das Gold läuft ein Lichtstreif, der Ballon schwebt und lässt sich anstupsen,
      das Chrom steht still und spiegelt das Licht des Mauszeigers. Beim Wechsel hat jedes Material seine eigene Verwandlung:
      Gold drückt sich heraus, Moos wächst in Inseln zu, Fell wächst Strähne für Strähne, Chrom läuft als Flüssigkeit darüber.
      Licht kommt dabei immer von links oben. Ohne WebGL bleibt das Standbild stehen. */
@@ -644,7 +644,7 @@
       var FS = [
         /* s: Material A (das bisherige), g: Material B (das neue). ma/mb: 0 Moos, 1 Gold, 2 Fell, 3 Chrom.
            md: 0 A reißt auf und B drückt sich heraus · 1 dasselbe rückwärts (B wächst über A zu) · 2 Fell wächst · 3 Chrom fließt */
-        'precision highp float;varying vec2 v;uniform sampler2D s;uniform sampler2D g;uniform float t;uniform float u;uniform float gt;uniform float ma;uniform float mb;uniform float md;uniform sampler2D nm;uniform vec3 lp;',
+        'precision highp float;varying vec2 v;uniform sampler2D s;uniform sampler2D g;uniform float t;uniform float u;uniform float gt;uniform float ma;uniform float mb;uniform float md;uniform sampler2D nm;uniform vec3 lp;uniform vec3 dp;',
         'const vec2 R=vec2(1185.,670.);const float T=6.2831853;',
         'vec2 gD;float gLean;float gFl;float gGust;',
         'vec4 tx(float w,vec2 c){return w<.5?texture2D(s,c):texture2D(g,c);}',
@@ -667,6 +667,9 @@
         ' }',
         ' vec2 o=d/R;o.y=-o.y;',
         ' vec2 cc=c-o;',
+        /* Gold-Ballon: Wo der Mauszeiger die Folie berührt (dp), gibt sie nach. Das Bild zieht sich zur Delle hin zusammen. */
+        ' float dk=0.,dr=0.;vec2 dn=vec2(0.);',
+        ' if(abs(m-1.)<.5&&dp.z>.001){vec2 da=vec2(R.x/R.y,1.);vec2 dv=(c-dp.xy)*da;dr=length(dv);dk=exp(-dr*dr/.011)*dp.z;dn=dv/(dr+.0001);cc-=dv/da*dk*.3;}',
         ' vec4 px;',
         ' if(abs(m-3.)<.5){',
         /* Chrom: die Spiegelung wandert langsam, der Umriss bleibt fest */
@@ -690,6 +693,12 @@
         '  px.rgb+=vec3(1.)*(smoothstep(.925,.975,ndh)*.5+pow(ndh,140.)*.8)*att*lp.z;',
         ' }else{px=tx(w,cc);}',
         ' px.rgb*=1.+.1*(gLean-.36)*wg+.03*gFl*wg*gGust;',
+        /* Delle im Licht von links oben: Die Mulde ist dunkler, ihre dem Licht zugewandte Wand glänzt, die andere liegt im Schatten */
+        ' if(dk>.0005){',
+        '  float rim=exp(-sq((dr-.085)/.035))*dp.z;float side=dot(dn,vec2(.7071,-.7071));',
+        '  px.rgb*=1.-.15*dk-.2*rim*max(-side,0.);',
+        '  px.rgb+=vec3(1.,.93,.7)*.42*rim*max(side,0.);',
+        ' }',
         ' if(abs(m-1.)<.5&&sk>0.){',
         '  vec2 q=v*R;q.y=R.y-q.y;',
         '  float sweep=exp(-sq((q.x/R.x*1.15+(q.y/R.y)*.4-fract(gt*.1)*2.4+.45)*6.5))*.2*sk;',
@@ -825,7 +834,7 @@
       gl.uniform1i(gl.getUniformLocation(pr, 'g'), 1);
       /* Relief der Chrom-Tilde (Platz 2). Bis es geladen ist, gilt eine glatte Fläche. */
       gl.uniform1i(gl.getUniformLocation(pr, 'nm'), 2);
-      var uLp = gl.getUniformLocation(pr, 'lp'), nmTex = gl.createTexture();
+      var uLp = gl.getUniformLocation(pr, 'lp'), uDp = gl.getUniformLocation(pr, 'dp'), nmTex = gl.createTexture();
       function nmSet(source) {
         gl.activeTexture(gl.TEXTURE2);
         gl.bindTexture(gl.TEXTURE_2D, nmTex);
@@ -840,6 +849,31 @@
       nmSet(null);
       /* Licht über dem Chrom: folgt dem Mauszeiger. Ohne Maus (Handy) oder wenn sie länger ruht, wandert es langsam von selbst. */
       var lx = 0.3, ly = 0.8, la = 0, mX = 0, mY = 0, mAt = -1e9, mDirty = false, cRect = null;
+      /* Umriss des Ballons (48 Punkte, Anteile der Bildbreite und -höhe). Damit wird gemessen, wie viel Platz bis zum Text bleibt. */
+      var GOLD_OUT = [0.857,0.047,0.811,0.134,0.760,0.211,0.708,0.255,0.654,0.273,0.601,0.273,0.548,0.262,0.495,0.231,0.441,0.201,0.389,0.169,0.335,0.144,0.282,0.123,0.229,0.116,0.175,0.131,0.122,0.152,0.069,0.193,0.019,0.262,0.011,0.355,0.013,0.449,0.014,0.544,0.009,0.637,0.009,0.732,0.009,0.826,0.011,0.920,0.051,0.900,0.101,0.832,0.155,0.780,0.208,0.756,0.261,0.757,0.314,0.767,0.368,0.786,0.421,0.810,0.474,0.845,0.527,0.871,0.581,0.900,0.634,0.920,0.687,0.922,0.741,0.910,0.794,0.881,0.847,0.843,0.898,0.780,0.947,0.695,0.989,0.604,0.971,0.509,0.951,0.417,0.928,0.322,0.906,0.229,0.885,0.134];
+      var goldLim = null;
+      function goldLimits() {
+        var ar = img.getBoundingClientRect(), rects = [], list = [], i, j;
+        Array.prototype.forEach.call(heroSec.querySelectorAll('h1,p,.btn'), function (el) {
+          if (el.closest('#hero-art') || el.closest('.logos__view')) return;
+          if (el.classList.contains('btn')) { rects.push(el.getBoundingClientRect()); return; }
+          var rg = document.createRange(); rg.selectNodeContents(el);
+          var cr = rg.getClientRects(); for (var q = 0; q < cr.length; q++) if (cr[q].width > 2 && cr[q].height > 2) rects.push(cr[q]);
+        });
+        for (i = 0; i < rects.length; i++) {
+          var r = rects[i], bd = 1e9, bnx = 0, bny = 0;
+          for (j = 0; j < GOLD_OUT.length; j += 2) {
+            var px = ar.left + GOLD_OUT[j] * ar.width, py = ar.top + GOLD_OUT[j + 1] * ar.height;
+            var ddx = Math.max(r.left, Math.min(r.right, px)) - px, ddy = Math.max(r.top, Math.min(r.bottom, py)) - py, dd = Math.sqrt(ddx * ddx + ddy * ddy);
+            if (dd < bd) { bd = dd; bnx = ddx / (dd || 1); bny = ddy / (dd || 1); }
+          }
+          /* in Richtung dieses Textes darf sich der Ballon nur so weit bewegen, dass 10 px Luft bleiben (plus Spielraum für die Drehung) */
+          if (bd < ar.width * 0.1) list.push([bnx, bny, Math.max(0, bd - 10 - ar.width * 0.008)]);
+        }
+        goldLim = list;
+      }
+      window.addEventListener('resize', function () { goldLim = null; }, { passive: true });
+      var shEl = $('.hero__moss-shadow'), gG = 0, nX = 0, nY = 0, nR = 0, vX = 0, vY = 0, vR = 0, bX = 0, bY = 0, dZ = 0, gMoved = false;
       if (finePointer) window.addEventListener('pointermove', function (e) {
         if (e.pointerType && e.pointerType !== 'mouse') return;
         mX = e.clientX; mY = e.clientY; mAt = performance.now(); mDirty = true;
@@ -921,7 +955,7 @@
         if (A === 'chrom' || (running && B === 'chrom')) {
           var tx_, ty_, sec = now / 1000;
           if (now - mAt < 5000) {
-            if (mDirty || !cRect) { if (!cRect) cRect = c.getBoundingClientRect(); mDirty = false; }
+            if (!cRect) cRect = img.getBoundingClientRect();
             tx_ = Math.max(-0.8, Math.min(1.8, (mX - cRect.left) / (cRect.width || 1)));
             ty_ = Math.max(-0.8, Math.min(1.8, 1 - (mY - cRect.top) / (cRect.height || 1)));
           } else {
@@ -931,6 +965,52 @@
           lx += (tx_ - lx) * lk; ly += (ty_ - ly) * lk; la += (1 - la) * Math.min(1, dt / 1000 * 2.5);
           gl.uniform3f(uLp, lx, ly, la);
         } else if (la) { la = 0; gl.uniform3f(uLp, lx, ly, 0); }
+        /* Gold-Ballon: schwebt ruhig und lässt sich mit der Maus anstupsen. Er weicht aus, federt zurück und bekommt
+           an der berührten Stelle eine Delle. Alle Ausschläge sind fest begrenzt, damit er in seinem Rahmen bleibt. */
+        var goldIdle = A === 'gold' && !running, ds = Math.min(0.05, dt / 1000);
+        gG += ((goldIdle ? 1 : 0) - gG) * Math.min(1, ds * (goldIdle ? 1.2 : 5));
+        if (gG > 0.002 || Math.abs(nX) + Math.abs(nY) + Math.abs(nR) * 0.01 > 0.0004 || dZ > 0.002) {
+          var fX = 0, fY = 0, tq = 0, dzT = 0, dpx = 0.5, dpy = 0.5, aw = img.clientWidth || 1, ah = img.clientHeight || 1;
+          if (goldIdle && finePointer && mAt > 0) {
+            if (!cRect) cRect = img.getBoundingClientRect();
+            var qx = (mX - cRect.left) / (cRect.width || 1) - 0.5, qy = ((mY - cRect.top) / (cRect.height || 1) - 0.5) * ah / aw;
+            var ee = Math.sqrt(qx * qx / 0.3136 + qy * qy / 0.1296);       /* 1 = Rand des Bereichs, in dem der Ballon die Maus spürt */
+            if (ee < 1) {
+              var ql = Math.sqrt(qx * qx + qy * qy) + 0.0001, mag = 1.06 * Math.sin(Math.PI * ee);
+              fX = -qx / ql * mag; fY = -qy / ql * mag; tq = (qx * fY - qy * fX) * 260;
+              dzT = Math.min(1, (1 - ee) / 0.45);
+            }
+            dpx = qx + 0.5 - bX; dpy = 1 - ((qy - bY) * aw / ah + 0.5);
+          }
+          vX += (fX - 38 * nX - 4.2 * vX) * ds; nX += vX * ds;
+          vY += (fY - 38 * nY - 4.2 * vY) * ds; nY += vY * ds;
+          vR += (tq - 30 * nR - 3.6 * vR) * ds; nR += vR * ds;
+          dZ += (dzT - dZ) * Math.min(1, ds * 9);
+          var fs = now / 1000;
+          bX = Math.max(-0.03, Math.min(0.03, Math.sin(fs * 0.21 + 2.1) * 0.005 * gG + nX));
+          bY = Math.max(-0.028, Math.min(0.028, (Math.sin(fs * 0.62) * 0.013 + Math.sin(fs * 0.27 + 1.3) * 0.006) * gG + nY));
+          /* nie näher als 10 px an Überschrift, Text und Knöpfe */
+          if (!goldLim) goldLimits();
+          var ox = bX * aw, oy = bY * aw, gi, gp, go;
+          for (gp = 0; gp < 2; gp++) for (gi = 0; gi < goldLim.length; gi++) {
+            go = ox * goldLim[gi][0] + oy * goldLim[gi][1] - goldLim[gi][2];
+            if (go > 0) { ox -= go * goldLim[gi][0]; oy -= go * goldLim[gi][1]; }
+          }
+          bX = ox / aw; bY = oy / aw;
+          var bR = Math.max(-0.9, Math.min(0.9, Math.sin(fs * 0.38 + 0.4) * 0.5 * gG + nR)), lift = -bY / 0.028;
+          c.style.transform = 'translate3d(' + (bX * aw).toFixed(2) + 'px,' + (bY * aw).toFixed(2) + 'px,0) rotate(' + bR.toFixed(3) + 'deg)';
+          if (shEl) {
+            /* steigt der Ballon, wird sein Schatten kleiner und blasser */
+            shEl.style.transform = 'translate3d(' + (bX * aw * 0.7).toFixed(2) + 'px,' + (bY * aw * 0.3).toFixed(2) + 'px,0) scale(' + (1.04 * (1 - 0.022 * lift)).toFixed(4) + ')';
+            shEl.style.opacity = (0.85 * (1 - 0.1 * lift)).toFixed(3);
+          }
+          gl.uniform3f(uDp, dpx, dpy, dZ * gG);
+          gMoved = true;
+        } else if (gMoved) {
+          gMoved = false; nX = nY = nR = vX = vY = vR = bX = bY = dZ = 0;
+          c.style.transform = ''; if (shEl) { shEl.style.transform = ''; shEl.style.opacity = ''; }
+          gl.uniform3f(uDp, 0.5, 0.5, 0);
+        }
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
         if (!live) { live = true; img.classList.add('is-live'); if (altEl) altEl.classList.add('is-live'); }
       }
