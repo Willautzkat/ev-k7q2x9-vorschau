@@ -242,6 +242,7 @@
   /* ---------- Messwerte: einmal lesen, beim Scrollen nur noch rechnen ----------
      So muss der Browser beim Scrollen kein Layout neu berechnen. */
   var M = { ready: false };
+  var brailleFig = $('#braille'), brailleSheet = $('.braille__sheet'), brailleLast = '';
   function absRect(el) { var r = el.getBoundingClientRect(); return { top: r.top + (window.scrollY || 0), h: r.height }; }
   function measure() {
     M.vh = window.innerHeight;
@@ -259,6 +260,7 @@
     M.read = readEls.map(function (r) { return absRect(r.el); });
     M.word = wordmark ? absRect(wordmark) : null;
     M.play = playMedia ? absRect(playMedia) : null;
+    M.braille = brailleFig && brailleSheet ? absRect(brailleFig) : null;
     M.rings = rings ? absRect(rings) : null;
     M.pinned = false;
     if (archGrid && archTrack) {
@@ -298,10 +300,10 @@
         var r = el.getBoundingClientRect();
         el.style.setProperty('--lx', (e.clientX - r.left).toFixed(0) + 'px');
         el.style.setProperty('--ly', (e.clientY - r.top).toFixed(0) + 'px');
-        /* Glaskugel der Karte: das Glanzlicht wandert auf die Seite, von der der Zeiger kommt */
+        /* Glasscheibe der Karte: der Schein wandert auf die Seite, von der der Zeiger kommt */
         if (ball) {
-          var b = ball.getBoundingClientRect(), R = b.width * 0.33;
-          var dx = e.clientX - (b.left + b.width * 0.5), dy = e.clientY - (b.top + b.height * 0.52);
+          var b = ball.getBoundingClientRect(), R = b.width * 0.5;
+          var dx = e.clientX - (b.left + b.width * 0.5), dy = e.clientY - (b.top + b.height * 0.5);
           var d = Math.sqrt(dx * dx + dy * dy) || 1, k = Math.min(1, d / (R * 2.2)) * 0.62;
           ball.style.setProperty('--hx', (50 + dx / d * k * 50).toFixed(1) + '%');
           ball.style.setProperty('--hy', (50 + dy / d * k * 50).toFixed(1) + '%');
@@ -420,6 +422,15 @@
     if (playImg && M.play && M.pinned) {
       var pt = M.play.top - y;
       if (pt + M.play.h > 0 && pt < vh) playMedia.style.setProperty('--py', ((0.5 - (vh - pt) / (vh + M.play.h)) * 48).toFixed(0) + 'px');
+    }
+
+    /* Braille: Die Prägung kippt beim Scrollen von der Aufsicht leicht zur Seite */
+    if (M.braille) {
+      var bt = M.braille.top - y;
+      if (bt + M.braille.h > 0 && bt < vh) {
+        var bv = Math.max(0, Math.min(1, (vh - bt) / (vh + M.braille.h))).toFixed(3);
+        if (bv !== brailleLast) { brailleLast = bv; brailleSheet.style.setProperty('--bt', bv); }
+      }
     }
 
     /* Markenarchäologie: Schicht für Schicht nach innen */
