@@ -107,6 +107,7 @@
     for (var i = 0; i < count; i++) f.p.push(seed(f, true));
   }
   var windAcc = 0;
+  var MAT_ACCENT = { moos: '#ACBE1D', gold: '#D6A23A', fell: '#72ADE4', chrom: '#A3ADBA' };
   function windFrame(t) {
     windRaf = 0;
     /* 30 Bilder pro Sekunde reichen für die langsamen Teilchen */
@@ -115,7 +116,7 @@
     var dt = Math.min(0.08, (t - windLast) / 1000 || 0.033);
     windLast = t;
     var gust = 1 + 0.45 * Math.sin(t * 0.00023) + 0.2 * Math.sin(t * 0.0011);
-    var any = false, accent = doc.classList.contains('is-gold') ? '#D6A23A' : '#ACBE1D';
+    var any = false, accent = MAT_ACCENT[doc.getAttribute('data-mat')] || '#ACBE1D';
     for (var k = 0; k < fields.length; k++) {
       var f = fields[k];
       if (!f.on) continue;
@@ -541,34 +542,63 @@
   window.addEventListener('touchmove', function () { hoverLock = false; }, { passive: true });
   update();
 
-  /* ---------- Hero: Ein Klick auf die Tilde legt das Gold frei, die Akzentfarbe der Seite wechselt mit ---------- */
-  var heroGold = { on: false, gl: null };
+  /* ---------- Hero: Ein Klick auf die Tilde wechselt das Material, die Akzentfarbe der Seite wechselt mit ----------
+     Start ist immer Moos. Jeder Klick zieht zufällig ein anderes Material; erst wenn alle dran waren, wiederholt sich eines. */
+  var MAT_NAME = { moos: 'Moos', gold: 'Gold', fell: 'Hellblaues Fell', chrom: 'Flüssiges Chrom' };
+  var heroMat = { cur: 'moos', gl: null, busy: false, queued: false, fast: false, done: null };
   (function () {
-    var art = $('#hero-art');
-    if (!art || !$('.hero__gold')) return;
+    var art = $('#hero-art'), alt = $('.hero__alt');
+    if (!art || !alt) return;
+    doc.setAttribute('data-mat', 'moos');
     art.removeAttribute('aria-hidden');
     art.setAttribute('role', 'button');
     art.setAttribute('tabindex', '0');
-    art.setAttribute('aria-pressed', 'false');
-    art.setAttribute('aria-label', 'Zwischen Moos und Gold wechseln');
-    function toggle() {
-      heroGold.on = !heroGold.on;
-      if (heroGold.gl) heroGold.gl(heroGold.on);
-      doc.classList.toggle('is-gold', heroGold.on);
-      art.setAttribute('aria-pressed', heroGold.on ? 'true' : 'false');
+    art.setAttribute('aria-label', 'Material der Tilde wechseln. Aktuell: Moos');
+    var bag = [];
+    function pick() {
+      if (!bag.length) {
+        for (var k in MAT_NAME) if (k !== heroMat.cur) bag.push(k);
+        for (var i = bag.length - 1; i > 0; i--) { var r = Math.floor(Math.random() * (i + 1)), x = bag[i]; bag[i] = bag[r]; bag[r] = x; }
+      }
+      return bag.pop();
     }
-    art.addEventListener('click', toggle);
+    function go() {
+      /* läuft noch eine Verwandlung, wird sie beschleunigt und der Klick danach ausgeführt */
+      if (heroMat.busy) { heroMat.queued = true; heroMat.fast = true; return; }
+      var prev = heroMat.cur, m = pick();
+      heroMat.cur = m;
+      doc.setAttribute('data-mat', m);
+      doc.classList.toggle('is-gold', m === 'gold');
+      doc.classList.toggle('is-alt', m !== 'moos');
+      art.setAttribute('aria-label', 'Material der Tilde wechseln. Aktuell: ' + MAT_NAME[m]);
+      if (m !== 'moos') {
+        /* Standbild für Geräte ohne WebGL oder mit „weniger Bewegung“ */
+        alt.srcset = 'assets/img/' + m + '-tilde-800.webp 800w, assets/img/' + m + '-tilde.webp 1400w';
+        alt.src = 'assets/img/' + m + '-tilde-800.webp';
+      }
+      if (heroMat.gl) heroMat.gl(prev, m);
+    }
+    heroMat.done = function () {
+      heroMat.fast = false;
+      if (heroMat.queued) { heroMat.queued = false; go(); }
+    };
+    art.addEventListener('click', go);
     art.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
     });
   })();
 
-  /* ---------- Hero: Wind zieht in Wellen durch das Moos ----------
-     Der Schatten ist ein eigenes, festes Bild. Das Moos selbst rechnet eine kleine Grafikkarten-Routine neu:
-     Jedes Büschel neigt sich und zittert für sich, auch am Rand. Ohne WebGL bleibt das Standbild stehen. */
+  /* ---------- Hero: die Tilde als kleine Grafikkarten-Routine ----------
+     Der Schatten ist ein eigenes, festes Bild. Im Ruhezustand lebt jedes Material auf seine Art:
+     Im Moos zieht Wind in Wellen durch die Büschel, das Fell wiegt sich sanft, über das Gold läuft ein Lichtstreif,
+     im Chrom wandert die Spiegelung. Beim Wechsel hat jedes Material seine eigene Verwandlung:
+     Gold drückt sich heraus, Moos wächst in Inseln zu, Fell wächst Strähne für Strähne, Chrom läuft als Flüssigkeit darüber.
+     Licht kommt dabei immer von links oben. Ohne WebGL bleibt das Standbild stehen. */
   (function () {
-    var img = $('.hero__moss'), heroSec = $('#top'), goldEl = $('.hero__gold');
+    var img = $('.hero__moss'), heroSec = $('#top'), altEl = $('.hero__alt');
     if (!img || !heroSec || reduce) return;
+    var MAT_ID = { moos: 0, gold: 1, fell: 2, chrom: 3 };
+    var DUR = { gold: 4600, moos: 4600, fell: 3600, chrom: 4000 };
     function start() {
       var c = document.createElement('canvas');
       c.className = 'hero__moss-gl';
@@ -577,18 +607,51 @@
       if (!gl) return;
       var VS = 'attribute vec2 p;varying vec2 v;void main(){v=p*.5+.5;gl_Position=vec4(p,0.,1.);}';
       var FS = [
-        'precision highp float;varying vec2 v;uniform sampler2D s;uniform sampler2D g;uniform float t;uniform float u;uniform float gt;',
+        /* s: Material A (das bisherige), g: Material B (das neue). ma/mb: 0 Moos, 1 Gold, 2 Fell, 3 Chrom.
+           md: 0 A reißt auf und B drückt sich heraus · 1 dasselbe rückwärts (B wächst über A zu) · 2 Fell wächst · 3 Chrom fließt */
+        'precision highp float;varying vec2 v;uniform sampler2D s;uniform sampler2D g;uniform float t;uniform float u;uniform float gt;uniform float ma;uniform float mb;uniform float md;',
         'const vec2 R=vec2(1185.,670.);const float T=6.2831853;',
-        'float A(vec2 o){return texture2D(s,v+o/R).a;}',
+        'vec2 gD;float gLean;float gFl;float gGust;',
+        'vec4 tx(float w,vec2 c){return w<.5?texture2D(s,c):texture2D(g,c);}',
+        'float sq(float x){return x*x;}',
         'float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}',
         /* ein weicher Zufallswert je Büschel */
         'float n(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(h(i),h(i+vec2(1.,0.)),f.x),mix(h(i+vec2(0.,1.)),h(i+vec2(1.,1.)),f.x),f.y);}',
         /* Landkarte, wo das Moos zuerst aufreißt und wo es am längsten bleibt */
         'float Hf(vec2 p){return clamp((.6*n(p/92.)+.4*n(p/37.+7.)-.14)/.72,0.,1.);}',
+        /* Eine Ebene in ihrem Ruhezustand. w: welches Bild, m: Material, off: zusätzliche Verschiebung in Pixeln,
+           sc: Größe um die Mitte, boost: verstärkt die Eigenbewegung, sk: Anteil des Lichtstreifs (nur Gold) */
+        'vec4 layer(float w,float m,vec2 off,float sc,float boost,float sk){',
+        ' vec2 c=(v-.5)/sc+.5;',
+        ' float ws=m<.5?1.:(abs(m-2.)<.5?.4*(1.+boost):0.);',
+        ' float wg=0.;vec2 d=off;',
+        ' if(ws>0.){',
+        '  float e=min(min(tx(w,c+vec2(14.,0.)/R).a,tx(w,c+vec2(-14.,0.)/R).a),min(tx(w,c+vec2(0.,14.)/R).a,tx(w,c+vec2(0.,-14.)/R).a));',
+        '  wg=mix(.5,1.,e)*ws;d+=gD*wg;',
+        ' }',
+        ' vec2 o=d/R;o.y=-o.y;',
+        ' vec2 cc=c-o;',
+        ' vec4 px;',
+        ' if(abs(m-3.)<.5){',
+        /* Chrom: die Spiegelung wandert langsam, der Umriss bleibt fest */
+        '  float fa=.0032*(1.+boost);',
+        '  vec2 fw=fa*vec2(sin(T*(c.y*2.1+t*.055)+3.*c.x),cos(T*(c.x*1.6-t*.045)+2.*c.y));',
+        '  px=tx(w,cc+fw);px.a=tx(w,cc).a;',
+        ' }else{px=tx(w,cc);}',
+        ' px.rgb*=1.+.1*(gLean-.36)*wg+.03*gFl*wg*gGust;',
+        ' if(abs(m-1.)<.5&&sk>0.){',
+        '  vec2 q=v*R;q.y=R.y-q.y;',
+        '  float sweep=exp(-sq((q.x/R.x*1.15+(q.y/R.y)*.4-fract(gt*.1)*2.4+.45)*6.5))*.2*sk;',
+        '  px.rgb=px.rgb*(1.+sweep)+vec3(1.,.93,.7)*.1*sweep;',
+        ' }',
+        ' return px;',
+        '}',
+        /* Wie weit das Fell an einer Stelle gewachsen ist: von links unten nach rechts oben */
+        'float furP(vec2 q){return clamp((u*1.42-(.62*q.x/R.x+.18*(1.-q.y/R.y)+.2*n(q/130.+3.)))/.42,0.,1.);}',
+        /* Wie tief eine Stelle schon im Chrom liegt: Die Flüssigkeit läuft von links oben, Tropfen eilen voraus */
+        'float chromC(vec2 q){return mix(-.25,1.22,u)-(.6*q.x/R.x+.4*q.y/R.y)+.1*(n(q/85.+vec2(0.,t*.25))-.5)+.085*(n(q/24.+vec2(t*.35,0.))-.6);}',
         'void main(){',
         ' vec2 q=v*R;q.y=R.y-q.y;float x01=q.x/R.x;',
-        ' float e=min(min(A(vec2(14.,0.)),A(vec2(-14.,0.))),min(A(vec2(0.,14.)),A(vec2(0.,-14.))));',
-        ' float w=mix(.5,1.,e);',
         ' float r1=n(q/9.),r2=n(q/9.+37.),r3=n(q/9.+91.),r4=n(q/17.+13.);',
         ' float g1=.5+.5*sin(T*((q.x+.25*q.y)/520.-t*.25));',
         ' float g2=.5+.5*sin(T*((q.x-.4*q.y)/310.-t*.375)+1.3);',
@@ -599,36 +662,76 @@
         ' float fr=mix(.7,2.3,r3)*(.8+.5*zone);',
         ' float fl=sin(T*fr*t+T*r2),fl2=sin(T*.625*t+T*r4);',
         ' float k=.25+.75*gust;',
-        ' vec2 d=vec2(6.2*lean+(1.5*fl+.8*fl2)*k,-1.9*lean+.75*fl*k*(r1-.5)*2.)*w;',
-        /* Freilegen: Das Moos reißt an vielen Stellen auf und zieht sich ungleichmäßig zu Inseln zusammen,
-           bis nichts mehr übrig ist. Das Gold darunter drückt sich dabei heraus. */
-        ' float H=Hf(q);',
-        ' float xu=2.*u-1.;',
-        ' float thr=mix(-.1,1.1,.5+.5*sign(xu)*pow(abs(xu),1.9));',   /* in der Mitte langsamer, damit die Fläche gleichmäßig schwindet */
-        ' vec2 gr=vec2(Hf(q+vec2(6.,0.))-Hf(q-vec2(6.,0.)),Hf(q+vec2(0.,6.))-Hf(q-vec2(0.,6.)));',
-        ' vec2 inw=gr/(length(gr)+.0008);',                         /* Richtung ins Innere der Moosinsel */
-        ' float rim=1.-smoothstep(0.,.22,H-thr);',                  /* wie nah am Rand der Insel */
-        ' float act=step(.001,u);',
-        ' d-=inw*(rim*rim*(10.+26.*u))*act;',                       /* am Rand staucht sich das Moos nach innen */
-        ' vec2 o=d/R;o.y=-o.y;',
-        ' vec4 m=texture2D(s,v-o);',
-        ' float am=m.a*mix(1.,smoothstep(thr-.012,thr+.03,H),act);',
-        ' vec3 col=m.rgb*(1.+.1*(lean-.36)*w+.03*fl*w*gust);',
-        ' col*=1.-.3*rim*rim*act*(1.-step(.999,u));',               /* der dicke Moosrand liegt im Schatten */
-        /* Gold: startet etwas kleiner und dunkler, wölbt sich heraus und federt am Ende leicht nach */
-        ' float c1=1.70158,c3=2.70158,ub=u-1.;',
-        ' float back=1.+c3*ub*ub*ub+c1*ub*ub;',
-        ' float sg=.925+.075*back;',
-        ' vec2 gv=(v-.5)/sg+.5;',
-        ' vec4 G=u>0.?texture2D(g,gv):vec4(0.);',
-        ' float open=max(smoothstep(0.,.3,thr-H),smoothstep(.8,1.,u));',                     /* wie lange die Stelle schon frei liegt */
-        ' float moving=act*(1.-step(.999,u));',
-        ' float near=exp(-pow((thr-H)/.05,2.))*moving;',            /* direkt am Moosrand: Schlagschatten */
-        ' float flash=exp(-pow((thr-H-.13)/.08,2.))*moving*.5;',       /* knapp dahinter blitzt es auf */
-        ' float sweep=exp(-pow((x01*1.15+(q.y/R.y)*.4-fract(gt*.1)*2.4+.45)*6.5,2.))*.2*step(.999,u);',
-        ' vec3 gc=G.rgb*(mix(.62,1.,open)*(1.-.38*near)+.5*flash+sweep)+vec3(1.,.93,.7)*(.2*flash+.1*sweep);',
-        ' float ag=G.a*act;',
-        ' gl_FragColor=vec4(col*am+gc*ag*(1.-am),am+ag*(1.-am));',
+        ' gD=vec2(6.2*lean+(1.5*fl+.8*fl2)*k,-1.9*lean+.75*fl*k*(r1-.5)*2.);gLean=lean;gFl=fl;gGust=gust;',
+        ' float idle=1.-smoothstep(0.,.08,u);',
+        ' if(md<1.5){',
+        /* Aufreißen: Die obere Schicht reißt an vielen Stellen auf und zieht sich ungleichmäßig zu Inseln zusammen,
+           bis nichts mehr übrig ist. Die untere drückt sich dabei heraus. Rückwärts wächst die obere wieder zu. */
+        '  float sw=md<.5?0.:1.;',
+        '  float uu=sw<.5?u:1.-u;',
+        '  float mt=sw<.5?ma:mb,mu=sw<.5?mb:ma;',
+        '  float H=Hf(q);',
+        '  float xu=2.*uu-1.;',
+        '  float thr=mix(-.1,1.1,.5+.5*sign(xu)*pow(abs(xu),1.9));',   /* in der Mitte langsamer, damit die Fläche gleichmäßig schwindet */
+        '  vec2 gr=vec2(Hf(q+vec2(6.,0.))-Hf(q-vec2(6.,0.)),Hf(q+vec2(0.,6.))-Hf(q-vec2(0.,6.)));',
+        '  vec2 inw=gr/(length(gr)+.0008);',                         /* Richtung ins Innere der Insel */
+        '  float rim=1.-smoothstep(0.,.22,H-thr);',                  /* wie nah am Rand der Insel */
+        '  float act=step(.001,uu);',
+        '  vec4 m=layer(sw,mt,-inw*(rim*rim*(10.+26.*uu))*act,1.,0.,sw<.5?idle:0.);',   /* am Rand staucht sich die Schicht nach innen */
+        '  float am=m.a*mix(1.,smoothstep(thr-.012,thr+.03,H),act);',
+        '  vec3 col=m.rgb;',
+        '  col*=1.-.3*rim*rim*act*(1.-step(.999,uu));',               /* der dicke Rand liegt im Schatten */
+        /* Untere Schicht: startet etwas kleiner und dunkler, wölbt sich heraus und federt am Ende leicht nach */
+        '  float c1=1.70158,c3=2.70158,ub=uu-1.;',
+        '  float back=1.+c3*ub*ub*ub+c1*ub*ub;',
+        '  float sg=.925+.075*back;',
+        '  vec4 G=uu>0.?layer(1.-sw,mu,vec2(0.),sg,0.,sw<.5?0.:idle):vec4(0.);',
+        '  float open=max(smoothstep(0.,.3,thr-H),smoothstep(.8,1.,uu));',                     /* wie lange die Stelle schon frei liegt */
+        '  float moving=act*(1.-step(.999,uu));',
+        '  float near=exp(-sq((thr-H)/.05))*moving;',            /* direkt am Rand: Schlagschatten */
+        '  float flash=exp(-sq((thr-H-.13)/.08))*moving*.5;',       /* knapp dahinter blitzt es auf */
+        '  vec3 tint=abs(mu-1.)<.5?vec3(1.,.93,.7):(abs(mu-2.)<.5?vec3(.86,.94,1.):vec3(1.));',
+        '  vec3 gc=G.rgb*(mix(.62,1.,open)*(1.-.38*near)+.5*flash)+tint*.2*flash;',
+        '  float ag=G.a*act;',
+        '  gl_FragColor=vec4(col*am+gc*ag*(1.-am),am+ag*(1.-am));',
+        ' }else if(md<2.5){',
+        /* Fell wächst: Strähne für Strähne schiebt sich aus der Fläche, erst kurz und im Schatten, dann lang und hell.
+           Das wachsende Fell wirft seinen Schatten nach rechts unten auf das alte Material und schüttelt sich kurz auf. */
+        '  float p=furP(q);',
+        '  vec2 hd=normalize(vec2(.55,-.83)+.28*vec2(n(q/190.)-.5,n(q/190.+9.)-.5));',   /* Wuchsrichtung, leicht verwirbelt */
+        '  vec2 hp=vec2(-hd.y,hd.x);',
+        '  float st=n(vec2(dot(q,hp)/2.2,dot(q,hd)/26.));',          /* jede Strähne kommt zu ihrer Zeit */
+        '  float len=smoothstep(st*.68,st*.68+.3,p);',
+        '  float gw=1.-p;',
+        '  vec4 F=layer(1.,mb,-hd*gw*gw*24.,1.-.045*gw,2.4*sin(3.14159*p),0.);',
+        '  float af=F.a*len;',
+        '  vec3 fc=F.rgb*mix(.5,1.,smoothstep(0.,.9,p));',            /* der Ansatz liegt im Schatten */
+        '  fc+=vec3(.78,.9,1.)*.2*exp(-sq((p-.38)/.17))*len;',    /* frische Spitzen fangen das Licht */
+        '  vec4 A0=layer(0.,ma,vec2(0.),1.,0.,idle);',
+        '  float sh=smoothstep(.05,.6,furP(q-vec2(13.,13.)))*(1.-len);',
+        '  vec3 ac=A0.rgb*(1.-.45*sh);',
+        '  float aa=A0.a*(1.-smoothstep(.5,.95,p));',
+        '  gl_FragColor=vec4(fc*af+ac*aa*(1.-af),af+aa*(1.-af));',
+        ' }else{',
+        /* Chrom fließt: Die Flüssigkeit läuft über die Form. Ihr Rand ist ein runder Wulst: zur Lichtseite hell,
+           zur anderen dunkel, er staucht die Spiegelung wie eine Linse und wirft einen Schatten voraus. */
+        '  float c0=chromC(q),cx=chromC(q+vec2(5.,0.)),cy=chromC(q+vec2(0.,5.));',
+        '  vec2 gd=vec2(cx-c0,cy-c0);',
+        '  vec2 no=-gd/(length(gd)+.00001);',                       /* zeigt aus der Flüssigkeit heraus */
+        '  float cov=smoothstep(0.,.008,c0);',
+        '  float bead=1.-clamp(c0/.075,0.,1.);',                    /* 1 am Rand, 0 im Inneren */
+        '  float lit=dot(no,vec2(-.7071,-.7071));',                 /* Licht von links oben */
+        '  float settle=1.-clamp(c0/.4,0.,1.);',
+        '  vec4 C=layer(1.,mb,no*bead*bead*30.,1.,5.*settle,0.);',
+        '  vec3 cc=C.rgb*(1.-.5*bead*max(-lit,0.))*(1.-.4*smoothstep(.78,1.,bead));',
+        '  cc+=vec3(1.)*.85*exp(-sq((bead-.5)/.17))*pow(max(lit,0.),1.5);',
+        '  float ac2=C.a*cov;',
+        '  vec4 A0=layer(0.,ma,vec2(0.),1.,0.,idle);',
+        '  float sh=smoothstep(0.,.035,chromC(q-vec2(10.,10.)))*(1.-cov);',
+        '  vec3 ac=A0.rgb*(1.-.5*sh);',
+        '  float aa=A0.a*(1.-smoothstep(.02,.1,c0));',
+        '  gl_FragColor=vec4(cc*ac2+ac*aa*(1.-ac2),ac2+aa*(1.-ac2));',
+        ' }',
         '}'].join('\n');
       function sh(type, src) { var o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); return gl.getShaderParameter(o, gl.COMPILE_STATUS) ? o : null; }
       var vs = sh(gl.VERTEX_SHADER, VS), fs = sh(gl.FRAGMENT_SHADER, FS);
@@ -643,45 +746,73 @@
       var loc = gl.getAttribLocation(pr, 'p');
       gl.enableVertexAttribArray(loc);
       gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-      var tex = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, tex);
       gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
       gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-      try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img); } catch (err) { return; }
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      /* je Material ein Bild auf der Grafikkarte */
+      var texs = {}, ready = {};
+      function upload(name, source) {
+        var tex = gl.createTexture();
+        gl.activeTexture(gl.TEXTURE2);
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.activeTexture(gl.TEXTURE0);
+        texs[name] = tex; ready[name] = true;
+      }
+      function bind(unit, name) {
+        gl.activeTexture(gl.TEXTURE0 + unit);
+        gl.bindTexture(gl.TEXTURE_2D, texs[name]);
+        gl.activeTexture(gl.TEXTURE0);
+      }
+      try { upload('moos', img); } catch (err) { return; }
       var uT = gl.getUniformLocation(pr, 't'), uU = gl.getUniformLocation(pr, 'u'), uGt = gl.getUniformLocation(pr, 'gt');
+      var uMa = gl.getUniformLocation(pr, 'ma'), uMb = gl.getUniformLocation(pr, 'mb'), uMd = gl.getUniformLocation(pr, 'md');
       gl.uniform1i(gl.getUniformLocation(pr, 's'), 0);
       gl.uniform1i(gl.getUniformLocation(pr, 'g'), 1);
-      /* Gold liegt als zweites Bild darunter */
-      var goldReady = false, goldTex = gl.createTexture();
-      gl.activeTexture(gl.TEXTURE1);
-      gl.bindTexture(gl.TEXTURE_2D, goldTex);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]));
-      gl.activeTexture(gl.TEXTURE0);
-      var goldImg = new Image();
-      goldImg.onload = function () {
-        try {
-          gl.activeTexture(gl.TEXTURE1);
-          gl.bindTexture(gl.TEXTURE_2D, goldTex);
-          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, goldImg);
-          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-          gl.activeTexture(gl.TEXTURE0);
-          goldReady = true;
-          if (heroGold.on) heroGold.gl(true);
-        } catch (err) {}
+      bind(0, 'moos'); bind(1, 'moos');
+      gl.uniform1f(uMa, 0); gl.uniform1f(uMb, 0); gl.uniform1f(uMd, 0);
+      /* Verwandlung von A nach B; rp läuft von 0 bis 1 */
+      var A = 'moos', B = 'moos', running = false, rp = 0, dur = 1, lastNow = 0, since = performance.now(), pend = null;
+      function begin(from, to) {
+        A = from; B = to; rp = 0; running = true; dur = DUR[to];
+        bind(0, A); bind(1, B);
+        gl.uniform1f(uMa, MAT_ID[A]); gl.uniform1f(uMb, MAT_ID[B]);
+        gl.uniform1f(uMd, to === 'gold' ? 0 : to === 'moos' ? 1 : to === 'fell' ? 2 : 3);
+        kick();
+      }
+      function finish() {
+        running = false; rp = 0; A = B;
+        bind(0, A);
+        gl.uniform1f(uMa, MAT_ID[A]); gl.uniform1f(uMd, 0);
+        since = performance.now();
+        heroMat.busy = false;
+        if (heroMat.done) heroMat.done();
+      }
+      heroMat.gl = function (from, to) {
+        heroMat.busy = true;
+        if (ready[to]) begin(from, to); else pend = [from, to];
       };
-      goldImg.src = (img.currentSrc || img.src).replace('moos-tilde', 'gold-tilde');
-      var revealFrom = 0, revealTo = 0, revealStart = 0, revealNow = 0, goldSince = 0, REVEAL_MS = 4600;
-      heroGold.gl = function (to) {
-        if (!goldReady) return;
-        revealFrom = revealNow; revealTo = to ? 1 : 0; revealStart = performance.now();
-      };
+      /* die übrigen Materialien nacheinander nachladen, sobald die Seite steht */
+      var base = img.currentSrc || img.src, rest = ['gold', 'fell', 'chrom'];
+      function loadNext() {
+        var name = rest.shift();
+        if (!name) return;
+        var im = new Image();
+        im.onload = function () {
+          try { upload(name, im); } catch (err) {}
+          if (pend && pend[1] === name) { var pp = pend; pend = null; if (ready[name]) begin(pp[0], pp[1]); else { heroMat.busy = false; heroMat.queued = false; } }
+          loadNext();
+        };
+        im.onerror = function () {
+          if (pend && pend[1] === name) { pend = null; heroMat.busy = false; heroMat.queued = false; }
+          loadNext();
+        };
+        im.src = base.replace('moos-tilde', name + '-tilde');
+      }
+      loadNext();
       function size() {
         var d = Math.min(window.devicePixelRatio || 1, 1.5);
         var w = Math.max(1, Math.round(img.clientWidth * d)), h = Math.max(1, Math.round(img.clientHeight * d));
@@ -692,28 +823,29 @@
       var on = false, raf = 0, skip = false, live = false, t0 = performance.now();
       function frame(now) {
         raf = 0;
-        if (!on || document.hidden) return;
+        if (!on || document.hidden) { lastNow = 0; return; }
         raf = requestAnimationFrame(frame);
+        var dt = lastNow ? Math.min(100, now - lastNow) : 0;
+        lastNow = now;
+        if (running) rp = Math.min(1, rp + dt / dur * (heroMat.fast ? 3.5 : 1));
         if (!finePointer) { skip = !skip; if (skip) return; }
         gl.uniform1f(uT, (now - t0) / 1000);
-        if (revealNow !== revealTo) {
-          var rp = Math.min(1, (now - revealStart) / (REVEAL_MS * Math.abs(revealTo - revealFrom) || 1));
-          var ez = 0.5 - 0.5 * Math.cos(Math.PI * rp);
-          revealNow = revealFrom + (revealTo - revealFrom) * ez;
-          if (rp >= 1) { revealNow = revealTo; goldSince = now; }
+        var uNow = 0;
+        if (running) {
+          if (rp >= 1) finish(); else uNow = 0.5 - 0.5 * Math.cos(Math.PI * rp);
         }
-        gl.uniform1f(uU, revealNow);
-        gl.uniform1f(uGt, (now - goldSince) / 1000);
+        gl.uniform1f(uU, uNow);
+        gl.uniform1f(uGt, (now - since) / 1000);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-        if (!live) { live = true; img.classList.add('is-live'); if (goldEl) goldEl.classList.add('is-live'); }
+        if (!live) { live = true; img.classList.add('is-live'); if (altEl) altEl.classList.add('is-live'); }
       }
       function kick() { if (on && !raf) raf = requestAnimationFrame(frame); }
       if ('IntersectionObserver' in window) {
-        new IntersectionObserver(function (es) { on = es[0].isIntersecting; kick(); }).observe(heroSec);
+        new IntersectionObserver(function (es) { on = es[0].isIntersecting; if (!on && running) { finish(); } kick(); }).observe(heroSec);
       } else { on = true; kick(); }
       window.addEventListener('resize', size, { passive: true });
       document.addEventListener('visibilitychange', kick);
-      c.addEventListener('webglcontextlost', function (e) { e.preventDefault(); on = false; c.style.display = 'none'; img.classList.remove('is-live'); if (goldEl) goldEl.classList.remove('is-live'); heroGold.gl = null; });
+      c.addEventListener('webglcontextlost', function (e) { e.preventDefault(); on = false; c.style.display = 'none'; img.classList.remove('is-live'); if (altEl) altEl.classList.remove('is-live'); heroMat.gl = null; heroMat.busy = false; heroMat.queued = false; });
     }
     if (img.complete && img.naturalWidth) start(); else img.addEventListener('load', start, { once: true });
   })();

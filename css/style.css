@@ -8,7 +8,7 @@
 @font-face{font-family:"JetBrains Mono";src:url("../assets/fonts/jetbrains-mono-500.woff2") format("woff2");font-weight:500;font-style:normal;font-display:swap}
 @font-face{font-family:"JetBrains Mono";src:url("../assets/fonts/jetbrains-mono-700.woff2") format("woff2");font-weight:700;font-style:normal;font-display:swap}
 
-/* Akzentfarben sind als Farbwerte angemeldet, damit der Wechsel von Grün zu Gold weich überblendet */
+/* Akzentfarben sind als Farbwerte angemeldet, damit der Wechsel zwischen den Materialien weich überblendet */
 @property --c-accent{syntax:"<color>";inherits:true;initial-value:#ACBE1D}
 @property --c-accent-press{syntax:"<color>";inherits:true;initial-value:#98A915}
 @property --c-accent-hover{syntax:"<color>";inherits:true;initial-value:#B7C92A}
@@ -131,6 +131,9 @@
 /* ---------- Basis ---------- */
 *,*::before,*::after{box-sizing:border-box}
 html.is-gold{--c-accent:#D6A23A;--c-accent-press:#B9882A;--c-accent-hover:#E0B24E;--c-accent-hover-strong:#E9C164;--c-accent-deep:#8A6216;--c-accent-light:#F0D488;--c-accent-glow:rgba(214,162,58,.55);--c-accent-glow-0:rgba(214,162,58,0);--c-accent-soft:rgba(214,162,58,.2);--c-accent-well:rgba(96,66,10,.6)}
+/* Weitere Materialien der Tilde: Hellblaues Fell und Flüssiges Chrom */
+html[data-mat="fell"]{--c-accent:#72ADE4;--c-accent-press:#5C97CE;--c-accent-hover:#86BAEA;--c-accent-hover-strong:#9AC7F0;--c-accent-deep:#1F5E96;--c-accent-light:#C4E0F7;--c-accent-glow:rgba(114,173,228,.55);--c-accent-glow-0:rgba(114,173,228,0);--c-accent-soft:rgba(114,173,228,.2);--c-accent-well:rgba(18,52,90,.6)}
+html[data-mat="chrom"]{--c-accent:#A3ADBA;--c-accent-press:#8B96A5;--c-accent-hover:#B2BBC7;--c-accent-hover-strong:#C1C9D3;--c-accent-deep:#4B5563;--c-accent-light:#DCE2EA;--c-accent-glow:rgba(163,173,186,.55);--c-accent-glow-0:rgba(163,173,186,0);--c-accent-soft:rgba(163,173,186,.2);--c-accent-well:rgba(36,42,52,.6)}
 html{transition:--c-accent 1.8s var(--ease),--c-accent-press 1.8s var(--ease),--c-accent-hover 1.8s var(--ease),--c-accent-hover-strong 1.8s var(--ease),--c-accent-deep 1.8s var(--ease),--c-accent-light 1.8s var(--ease);-webkit-text-size-adjust:100%;text-size-adjust:100%;scroll-behavior:smooth;scroll-padding-top:7.5rem}
 body{margin:0;background:var(--c-bg);color:var(--c-ink);font-family:var(--ff-sans);font-size:var(--fs-body);line-height:var(--lh-body);font-weight:400;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;overflow-x:hidden}
 h1,h2,h3,p,ol,ul,dl,dd,figure,blockquote{margin:0}
@@ -230,11 +233,11 @@ address{font-style:normal}
 .hero__float{position:absolute;inset:0}
 .hero__float-in{position:absolute;inset:0}
 .hero__moss-shadow{position:absolute;left:-8.571%;top:-15.152%;width:117.143%;height:130.303%;max-width:none;pointer-events:none}
-.hero__moss,.hero__gold{position:absolute;inset:0;width:100%;height:100%;transition:opacity 1.4s var(--ease)}
-.hero__gold{opacity:0}
-html.is-gold .hero__gold{opacity:1}
-html.is-gold .hero__moss{opacity:0}
-.hero__moss.is-live,.hero__gold.is-live,html.is-gold .hero__moss.is-live,html.is-gold .hero__gold.is-live{opacity:0;transition:none}
+.hero__moss,.hero__alt{position:absolute;inset:0;width:100%;height:100%;transition:opacity 1.4s var(--ease)}
+.hero__alt{opacity:0}
+html.is-alt .hero__alt{opacity:1}
+html.is-alt .hero__moss{opacity:0}
+.hero__moss.is-live,.hero__alt.is-live,html.is-alt .hero__moss.is-live,html.is-alt .hero__alt.is-live{opacity:0;transition:none}
 .hero__art[role="button"]{pointer-events:auto;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .hero__art[role="button"]:focus-visible{outline:2px solid var(--c-ink);outline-offset:.5rem;border-radius:1rem}
 .hero__moss-gl{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
@@ -770,12 +773,12 @@ html.is-gold .hero__moss{opacity:0}
 .logoimg{display:grid;width:8.25rem;aspect-ratio:440/96}
 .logoimg__i{grid-area:1/1;width:100%;height:auto;opacity:0;transition:opacity 1.2s var(--ease)}
 .logoimg__i--moos{opacity:1}
-html.is-gold .logoimg__i--moos{opacity:0}
-html.is-gold .logoimg__i--gold{opacity:1}
-.header.on-dark .logoimg__i--moos,.header.on-dark .logoimg__i--gold{opacity:0}
+html.is-alt .logoimg__i--moos{opacity:0}
+html.is-gold .logoimg__i--gold,html[data-mat="fell"] .logoimg__i--fell,html[data-mat="chrom"] .logoimg__i--chrom{opacity:1}
+.header.on-dark .logoimg__i--moos,.header.on-dark .logoimg__i--gold,.header.on-dark .logoimg__i--fell,.header.on-dark .logoimg__i--chrom{opacity:0}
 .header.on-dark .logoimg__i--moos-hell{opacity:1}
-html.is-gold .header.on-dark .logoimg__i--moos-hell{opacity:0}
-html.is-gold .header.on-dark .logoimg__i--gold-hell{opacity:1}
+html.is-alt .header.on-dark .logoimg__i--moos-hell{opacity:0}
+html.is-gold .header.on-dark .logoimg__i--gold-hell,html[data-mat="fell"] .header.on-dark .logoimg__i--fell-hell,html[data-mat="chrom"] .header.on-dark .logoimg__i--chrom-hell{opacity:1}
 .header .logoimg__i{transition-duration:.45s}
 html.is-gold .header .logoimg__i,html:not(.is-gold) .header .logoimg__i{transition:opacity .45s var(--ease)}
 .footer__logo{display:block;width:max-content;margin-bottom:1.5rem;border-radius:.5rem}
@@ -832,9 +835,9 @@ body{background:transparent}
 /* Markenarchäologie: gerenderte 3D-Objekte. Jedes Bild steht aufrecht zur Kamera (hebt die Neigung des Stapels auf)
    und ist so weit angehoben, dass der Schatten vor der Platte liegt; die Verkleinerung gleicht die Perspektive aus. */
 .obj__img{position:absolute;max-width:none;height:auto;transform:rotateZ(42deg) rotateX(-58deg) translateZ(24cqw) scale(.98);opacity:clamp(0,calc(var(--ob)*400),1);pointer-events:none;backface-visibility:hidden}
-.obj__img--gold{opacity:0;transition:opacity 1.4s var(--ease)}
-html.is-gold .obj__img--gold{opacity:clamp(0,calc(var(--ob)*400),1)}
-html.is-gold .obj--kern .obj__img:not(.obj__img--gold){opacity:0;transition:opacity 1.4s var(--ease)}
+.obj__img--alt{opacity:0;transition:opacity 1.4s var(--ease)}
+html.is-gold .obj__img--gold,html[data-mat="fell"] .obj__img[data-m="fell"],html[data-mat="chrom"] .obj__img[data-m="chrom"]{opacity:clamp(0,calc(var(--ob)*400),1)}
+html.is-alt .obj--kern .obj__img:not(.obj__img--alt){opacity:0;transition:opacity 1.4s var(--ease)}
 .obj--img{left:38%;top:60%}
 
 /* Kern-Platte ist grau wie die anderen; nur die Kugel trägt die Farbe */
@@ -1003,8 +1006,8 @@ html.is-gold .obj--kern .obj__img:not(.obj__img--gold){opacity:0;transition:opac
 /* Leistungskarten: gerenderte Glaskugel mit dem Icon im Glas, halb in die Karte eingelassen */
 .card__icon{right:.5rem;top:.25rem;width:6.25rem;height:6.25rem;box-shadow:none;background:none;border-radius:0}
 .card__icon img{position:absolute;inset:0;width:100%;height:100%;max-width:none}
-.card__icon-gold{opacity:0;transition:opacity 1.4s var(--ease)}
-html.is-gold .card__icon-gold{opacity:1}
+.card__icon-alt{opacity:0;transition:opacity 1.4s var(--ease)}
+html.is-gold .card__icon-gold,html[data-mat="fell"] .card__icon-alt[data-m="fell"],html[data-mat="chrom"] .card__icon-alt[data-m="chrom"]{opacity:1}
 .card .title{padding-right:3.5rem}
 
 /* Zeigerlicht auf der Glaskugel: zusätzliches Glanzlicht, das der Maus folgt */
