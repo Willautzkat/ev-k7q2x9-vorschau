@@ -1069,3 +1069,55 @@ html.is-gold .card__icon-gold,html[data-mat="fell"] .card__icon-alt[data-m="fell
 .braille__caption{margin-top:2.75rem}
 @media (max-width:64rem){.braille{width:min(100%,32rem)}}
 @media (max-width:40rem){.braille{width:100%;transform:none;margin-bottom:0}.braille__stage{padding-block:1rem .5rem}.braille__dots{transform:translateZ(.18rem)}.braille__caption{margin-top:1.5rem}}
+/* ---------- Hero passt immer ganz auf den Bildschirm ----------
+   Alle Maße im Hero, die Höhe kosten, sind an die Bildschirmhöhe gebunden (svh): Abstände, Überschrift, Tilde.
+   Auf hohen Bildschirmen gelten die bisherigen Maße, auf niedrigen schrumpft alles gemeinsam. Die Reihenfolge bleibt je Gerät gleich. */
+@media (min-width:64.0625rem),(min-width:40.0625rem) and (max-width:64rem) and (orientation:landscape){
+  .hero{padding-top:max(6.25rem,min(11.5rem,20.11svh));padding-bottom:min(3.5rem,6.12svh)}
+  .hero .h1{font-size:min(var(--fs-h1),15.30svh)}
+  .hero__sub{margin-top:min(3.4375rem,6.01svh);font-size:clamp(.9375rem,2.40svh,var(--fs-lead))}
+  .hero__actions{margin-top:min(2.75rem,4.81svh)}
+  .hero__actions .btn{min-height:clamp(2.75rem,6.12svh,3.5rem)}
+  .hero__note{margin-top:min(1.5rem,2.62svh)}
+  .hero .logos{margin-top:min(2rem,3.50svh)}
+  .hero .logos__item{height:clamp(1.5rem,4.37svh,2.5rem)}
+  .hero__art{top:min(15.5rem,27.10svh);width:min(43.75rem,48.6vw,76.50svh)}
+}
+/* Tablet quer: Tilde steht wie am Desktop rechts neben dem Text, sonst passt der Hero nicht in die Höhe */
+@media (min-width:40.0625rem) and (max-width:64rem) and (orientation:landscape){
+  .hero__art{position:absolute;right:.5rem;margin:0;width:min(43vw,76.50svh,calc(100vw - 2*var(--pad) - 35.5rem))}
+  .hero__actions{flex-direction:row;align-items:center}
+  .hero__sub{max-width:min(28rem,44vw)}
+  .hero .logos{max-width:min(30rem,44vw)}
+}
+/* Tablet hoch: Text oben, Tilde darunter */
+@media (min-width:40.0625rem) and (max-width:64rem) and (orientation:portrait){
+  .hero{padding-top:max(6.25rem,min(11.5rem,15svh))}
+  .hero__art{width:min(100%,40rem,48svh);margin-top:min(3.5rem,3.5svh)}
+}
+/* Handy: Tilde oben, dann Überschrift, Text, Knöpfe, Logos */
+@media (max-width:40rem){
+  .hero{padding-top:max(5rem,min(6.25rem,11.63svh))}
+  .hero__art{width:min(58%,14rem,26.05svh);margin-bottom:min(1.5rem,2.79svh)}
+  .hero .h1{font-size:min(var(--fs-h1),5.58svh)}
+  .hero__sub{margin-top:min(2rem,3.72svh);font-size:clamp(.875rem,2.09svh,var(--fs-lead))}
+  .hero__actions{margin-top:min(2rem,3.72svh);gap:min(1rem,1.86svh)}
+  .hero__actions .btn{min-height:clamp(2.75rem,6.51svh,3.5rem)}
+  .hero__note{margin-top:min(1.5rem,2.79svh)}
+  .hero .logos{margin-top:min(2.25rem,4.19svh);gap:min(.5rem,.8svh)}
+  .hero .logos__item{height:clamp(1.5rem,4.65svh,2.5rem)}
+}
+/* Schmale Desktops mit wenig Höhe: Knöpfe nebeneinander statt untereinander, die Tilde lässt ihnen Platz */
+@media (min-width:64.0625rem) and (max-width:80rem) and (max-height:52rem){
+  .hero__actions{flex-direction:row;align-items:center}
+  .hero__art{width:min(48.6vw,76.50svh,calc(100vw - 2*var(--pad) - 35.5rem))}
+}
+/* Sehr niedrige Bildschirme: letzter Rest an Luft */
+@media (min-width:40.0625rem) and (max-height:39rem){.hero{padding-top:max(5.75rem,17svh)}}
+@media (max-width:40rem) and (max-height:37.5rem){
+  .hero{padding-top:4.75rem}
+  .hero__art{width:min(58%,14rem,21svh);margin-bottom:.5rem}
+  .hero__note{margin-top:.5rem}
+  .hero .logos{margin-top:.75rem}
+  .hero .logos__label{display:none}
+}
