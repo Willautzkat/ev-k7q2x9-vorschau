@@ -788,6 +788,12 @@ html.is-gold .header .logoimg__i,html:not(.is-gold) .header .logoimg__i{transiti
 
 /* Spielraum: 3D-Ball auf dem Rasen (Canvas ragt oben über das Foto, für hohe Bälle) */
 .play__ball{position:absolute;left:0;top:-22%;width:100%;height:122%;transform:translate3d(0,var(--py,0),0);pointer-events:none}
+/* Spielraum: Die Fläche wechselt mit dem Material der Tilde. Das neue Bild blendet über dem alten ein. */
+.play__surf{position:absolute;inset:0;opacity:0;transition:opacity 1.4s var(--ease)}
+.play__surf.is-on{opacity:1}
+.play__surf.is-top{z-index:1}
+.play__ball{z-index:2}
+@media (prefers-reduced-motion:reduce){.play__surf{transition:none}}
 .play.is-ball{cursor:pointer}
 .play.is-ball{cursor:grab}
 .play.is-grab,.play.is-grab *{cursor:grabbing;user-select:none;-webkit-user-select:none}

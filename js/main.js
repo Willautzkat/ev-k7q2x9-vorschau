@@ -544,6 +544,29 @@
 
   /* ---------- Hero: Ein Klick auf die Tilde wechselt das Material, die Akzentfarbe der Seite wechselt mit ----------
      Start ist immer Moos. Jeder Klick zieht zufällig ein anderes Material; erst wenn alle dran waren, wiederholt sich eines. */
+  /* Spielraum: Die Fläche unter der Kugel wechselt mit dem Material (Rasen bei Moos). Bilder laden erst, wenn sie gebraucht werden. */
+  var playSurf = (function () {
+    var media = $('#play-media'), els = {}, cur = null, timer = 0;
+    if (!media) return function () {};
+    Array.prototype.forEach.call(media.querySelectorAll('.play__surf'), function (el) { els[el.getAttribute('data-m')] = el; });
+    return function (m) {
+      var next = els[m] || null, old = cur, k;
+      if (next === cur) return;
+      clearTimeout(timer);
+      for (k in els) if (els[k] !== next && els[k] !== cur) els[k].classList.remove('is-on', 'is-top');
+      cur = next;
+      if (next) {
+        if (!next.getAttribute('src')) { next.srcset = next.getAttribute('data-srcset'); next.src = next.getAttribute('data-src'); }
+        if (old) old.classList.remove('is-top');
+        next.classList.add('is-top');
+        var show = function () { if (cur === next) next.classList.add('is-on'); };
+        if (next.complete && next.naturalWidth) show(); else next.addEventListener('load', show, { once: true });
+        timer = setTimeout(function () { if (old && old !== cur) old.classList.remove('is-on'); }, 1600);
+      } else if (old) {
+        old.classList.add('is-top'); old.classList.remove('is-on');
+      }
+    };
+  })();
   var MAT_NAME = { moos: 'Moos', gold: 'Gold', fell: 'Hellblaues Fell', chrom: 'Flüssiges Chrom' };
   var heroMat = { cur: 'moos', gl: null, busy: false, queued: false, fast: false, done: null };
   (function () {
@@ -576,6 +599,7 @@
         alt.srcset = 'assets/img/' + m + '-tilde-800.webp 800w, assets/img/' + m + '-tilde.webp 1400w';
         alt.src = 'assets/img/' + m + '-tilde-800.webp';
       }
+      playSurf(m);
       if (heroMat.gl) heroMat.gl(prev, m);
     }
     heroMat.done = function () {
