@@ -794,6 +794,11 @@ html.is-gold .header .logoimg__i,html:not(.is-gold) .header .logoimg__i{transiti
 .play__surf.is-top{z-index:1}
 .play__ball{z-index:2}
 @media (prefers-reduced-motion:reduce){.play__surf{transition:none}}
+/* Kontakt: Die Tilde zeigt dasselbe Material wie die Tilde im Hero. Das neue Bild blendet über dem alten ein. */
+.contact__moss img{position:absolute;inset:0;opacity:0;transition:opacity 1.4s var(--ease)}
+.contact__moss img.is-on{opacity:1}
+.contact__moss img.is-top{z-index:1}
+@media (prefers-reduced-motion:reduce){.contact__moss img{transition:none}}
 .play.is-ball{cursor:pointer}
 .play.is-ball{cursor:grab}
 .play.is-grab,.play.is-grab *{cursor:grabbing;user-select:none;-webkit-user-select:none}

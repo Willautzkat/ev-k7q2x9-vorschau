@@ -544,11 +544,15 @@
 
   /* ---------- Hero: Ein Klick auf die Tilde wechselt das Material, die Akzentfarbe der Seite wechselt mit ----------
      Start ist immer Moos. Jeder Klick zieht zufällig ein anderes Material; erst wenn alle dran waren, wiederholt sich eines. */
-  /* Spielraum: Die Fläche unter der Kugel wechselt mit dem Material (Rasen bei Moos). Bilder laden erst, wenn sie gebraucht werden. */
-  var playSurf = (function () {
-    var media = $('#play-media'), els = {}, cur = null, timer = 0;
-    if (!media) return function () {};
-    Array.prototype.forEach.call(media.querySelectorAll('.play__surf'), function (el) { els[el.getAttribute('data-m')] = el; });
+  /* Bilder, die mit dem Material der Tilde wechseln: Das neue blendet über dem alten ein, erst danach verschwindet das alte.
+     Bilder mit data-src laden erst, wenn sie gebraucht werden. Gibt es für ein Material kein Bild, bleibt der Grund darunter sichtbar. */
+  function matSwap(box, sel) {
+    var els = {}, cur = null, timer = 0;
+    if (!box) return function () {};
+    Array.prototype.forEach.call(box.querySelectorAll(sel), function (el) {
+      els[el.getAttribute('data-m')] = el;
+      if (el.classList.contains('is-on')) cur = el;
+    });
     return function (m) {
       var next = els[m] || null, old = cur, k;
       if (next === cur) return;
@@ -556,7 +560,10 @@
       for (k in els) if (els[k] !== next && els[k] !== cur) els[k].classList.remove('is-on', 'is-top');
       cur = next;
       if (next) {
-        if (!next.getAttribute('src')) { next.srcset = next.getAttribute('data-srcset'); next.src = next.getAttribute('data-src'); }
+        if (!next.getAttribute('src')) {
+          if (next.getAttribute('data-srcset')) next.srcset = next.getAttribute('data-srcset');
+          next.src = next.getAttribute('data-src');
+        }
         if (old) old.classList.remove('is-top');
         next.classList.add('is-top');
         var show = function () { if (cur === next) next.classList.add('is-on'); };
@@ -566,7 +573,10 @@
         old.classList.add('is-top'); old.classList.remove('is-on');
       }
     };
-  })();
+  }
+  /* Spielraum: die Fläche unter der Kugel (Rasen bei Moos). Kontakt: die Tilde über der Kontakt-Box. */
+  var playSurf = matSwap($('#play-media'), '.play__surf');
+  var contactTilde = matSwap($('.contact__moss'), 'img');
   var MAT_NAME = { moos: 'Moos', gold: 'Gold', fell: 'Hellblaues Fell', chrom: 'Flüssiges Chrom' };
   var heroMat = { cur: 'moos', gl: null, busy: false, queued: false, fast: false, done: null };
   (function () {
@@ -600,6 +610,7 @@
         alt.src = 'assets/img/' + m + '-tilde-800.webp';
       }
       playSurf(m);
+      contactTilde(m);
       if (heroMat.gl) heroMat.gl(prev, m);
     }
     heroMat.done = function () {
@@ -614,8 +625,8 @@
 
   /* ---------- Hero: die Tilde als kleine Grafikkarten-Routine ----------
      Der Schatten ist ein eigenes, festes Bild. Im Ruhezustand lebt jedes Material auf seine Art:
-     Im Moos zieht Wind in Wellen durch die Büschel, das Fell wiegt sich sanft, über das Gold läuft ein Lichtstreif,
-     im Chrom wandert die Spiegelung. Beim Wechsel hat jedes Material seine eigene Verwandlung:
+     Im Moos zieht Wind in Wellen durch die Büschel, durch das Fell geht derselbe Wind und lässt vor allem die Spitzen am Rand wehen, über das Gold läuft ein Lichtstreif,
+     das Chrom steht still und spiegelt das Licht des Mauszeigers. Beim Wechsel hat jedes Material seine eigene Verwandlung:
      Gold drückt sich heraus, Moos wächst in Inseln zu, Fell wächst Strähne für Strähne, Chrom läuft als Flüssigkeit darüber.
      Licht kommt dabei immer von links oben. Ohne WebGL bleibt das Standbild stehen. */
   (function () {
@@ -633,7 +644,7 @@
       var FS = [
         /* s: Material A (das bisherige), g: Material B (das neue). ma/mb: 0 Moos, 1 Gold, 2 Fell, 3 Chrom.
            md: 0 A reißt auf und B drückt sich heraus · 1 dasselbe rückwärts (B wächst über A zu) · 2 Fell wächst · 3 Chrom fließt */
-        'precision highp float;varying vec2 v;uniform sampler2D s;uniform sampler2D g;uniform float t;uniform float u;uniform float gt;uniform float ma;uniform float mb;uniform float md;',
+        'precision highp float;varying vec2 v;uniform sampler2D s;uniform sampler2D g;uniform float t;uniform float u;uniform float gt;uniform float ma;uniform float mb;uniform float md;uniform sampler2D nm;uniform vec3 lp;',
         'const vec2 R=vec2(1185.,670.);const float T=6.2831853;',
         'vec2 gD;float gLean;float gFl;float gGust;',
         'vec4 tx(float w,vec2 c){return w<.5?texture2D(s,c):texture2D(g,c);}',
@@ -647,20 +658,36 @@
            sc: Größe um die Mitte, boost: verstärkt die Eigenbewegung, sk: Anteil des Lichtstreifs (nur Gold) */
         'vec4 layer(float w,float m,vec2 off,float sc,float boost,float sk){',
         ' vec2 c=(v-.5)/sc+.5;',
-        ' float ws=m<.5?1.:(abs(m-2.)<.5?.4*(1.+boost):0.);',
+        ' float ws=m<.5?1.:(abs(m-2.)<.5?.75*(1.+.45*boost):0.);',
         ' float wg=0.;vec2 d=off;',
         ' if(ws>0.){',
         '  float e=min(min(tx(w,c+vec2(14.,0.)/R).a,tx(w,c+vec2(-14.,0.)/R).a),min(tx(w,c+vec2(0.,14.)/R).a,tx(w,c+vec2(0.,-14.)/R).a));',
-        '  wg=mix(.5,1.,e)*ws;d+=gD*wg;',
+        /* Moos bewegt sich am Rand weniger, beim Fell wehen gerade die Spitzen am Rand */
+        '  wg=(m<.5?mix(.5,1.,e):mix(1.6,.85,e))*ws;d+=gD*wg;',
         ' }',
         ' vec2 o=d/R;o.y=-o.y;',
         ' vec2 cc=c-o;',
         ' vec4 px;',
         ' if(abs(m-3.)<.5){',
         /* Chrom: die Spiegelung wandert langsam, der Umriss bleibt fest */
-        '  float fa=.0032*(1.+boost);',
+        /* Chrom steht still und antwortet auf das Licht: Der Mauszeiger ist eine Lichtquelle über der Fläche (lp).
+           nm ist das Relief der Tilde. Das Licht spiegelt sich als helle Fläche und als Glanzpunkt in den Falten,
+           die dem Licht abgewandten Flanken werden dunkler, und die Spiegelung in den Schrägen wandert mit.
+           Nur direkt nach dem Darüberfließen schwappt die Spiegelung noch kurz nach (boost). */
+        '  float fa=.0032*boost;',
         '  vec2 fw=fa*vec2(sin(T*(c.y*2.1+t*.055)+3.*c.x),cos(T*(c.x*1.6-t*.045)+2.*c.y));',
-        '  px=tx(w,cc+fw);px.a=tx(w,cc).a;',
+        '  vec3 nn=texture2D(nm,cc).rgb;',
+        '  vec3 N=normalize(vec3((nn.r-.5)*2.,-(nn.g-.5)*2.,max(nn.b,.06)));',
+        '  vec2 asp=vec2(R.x/R.y,1.);',
+        '  vec3 lv=vec3((lp.xy-c)*asp,.34);float ld=length(lv.xy);vec3 l=normalize(lv);',
+        '  float att=1./(1.+ld*ld*1.6);',
+        '  float ndh=max(dot(N,normalize(l+vec3(0.,0.,1.))),0.);',
+        '  float lit=dot(N,l);',
+        /* vier Abtastpunkte je Bildpunkt: Das große Bild wird sauber verkleinert, harte Kanten bleiben glatt */
+        '  vec2 cs=cc+fw-l.xy/asp*(1.-N.z)*.018*lp.z;vec2 po=.3/R;',
+        '  px=.25*(tx(w,cs+po)+tx(w,cs-po)+tx(w,cs+vec2(po.x,-po.y))+tx(w,cs+vec2(-po.x,po.y)));px.a=tx(w,cc).a;',
+        '  px.rgb*=mix(1.,mix(.6,1.1,smoothstep(-.3,.7,lit)),lp.z*(.35+.65*att));',
+        '  px.rgb+=vec3(1.)*(smoothstep(.925,.975,ndh)*.5+pow(ndh,140.)*.8)*att*lp.z;',
         ' }else{px=tx(w,cc);}',
         ' px.rgb*=1.+.1*(gLean-.36)*wg+.03*gFl*wg*gGust;',
         ' if(abs(m-1.)<.5&&sk>0.){',
@@ -776,7 +803,7 @@
       var texs = {}, ready = {};
       function upload(name, source) {
         var tex = gl.createTexture();
-        gl.activeTexture(gl.TEXTURE2);
+        gl.activeTexture(gl.TEXTURE3);
         gl.bindTexture(gl.TEXTURE_2D, tex);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
@@ -796,6 +823,29 @@
       var uMa = gl.getUniformLocation(pr, 'ma'), uMb = gl.getUniformLocation(pr, 'mb'), uMd = gl.getUniformLocation(pr, 'md');
       gl.uniform1i(gl.getUniformLocation(pr, 's'), 0);
       gl.uniform1i(gl.getUniformLocation(pr, 'g'), 1);
+      /* Relief der Chrom-Tilde (Platz 2). Bis es geladen ist, gilt eine glatte Fläche. */
+      gl.uniform1i(gl.getUniformLocation(pr, 'nm'), 2);
+      var uLp = gl.getUniformLocation(pr, 'lp'), nmTex = gl.createTexture();
+      function nmSet(source) {
+        gl.activeTexture(gl.TEXTURE2);
+        gl.bindTexture(gl.TEXTURE_2D, nmTex);
+        if (source) gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, source);
+        else gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, 1, 1, 0, gl.RGB, gl.UNSIGNED_BYTE, new Uint8Array([128, 128, 255]));
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.activeTexture(gl.TEXTURE0);
+      }
+      nmSet(null);
+      /* Licht über dem Chrom: folgt dem Mauszeiger. Ohne Maus (Handy) oder wenn sie länger ruht, wandert es langsam von selbst. */
+      var lx = 0.3, ly = 0.8, la = 0, mX = 0, mY = 0, mAt = -1e9, mDirty = false, cRect = null;
+      if (finePointer) window.addEventListener('pointermove', function (e) {
+        if (e.pointerType && e.pointerType !== 'mouse') return;
+        mX = e.clientX; mY = e.clientY; mAt = performance.now(); mDirty = true;
+      }, { passive: true });
+      window.addEventListener('scroll', function () { cRect = null; }, { passive: true });
+      window.addEventListener('resize', function () { cRect = null; }, { passive: true });
       bind(0, 'moos'); bind(1, 'moos');
       gl.uniform1f(uMa, 0); gl.uniform1f(uMb, 0); gl.uniform1f(uMd, 0);
       /* Verwandlung von A nach B; rp läuft von 0 bis 1 */
@@ -834,7 +884,15 @@
           if (pend && pend[1] === name) { pend = null; heroMat.busy = false; heroMat.queued = false; }
           loadNext();
         };
-        im.src = base.replace('moos-tilde', name + '-tilde');
+        var src = base.replace('moos-tilde', name + '-tilde');
+        /* Chrom hat harte Kanten: auf großen Bildschirmen immer das große Bild, sonst wirkt es weich */
+        if (name === 'chrom' && img.clientWidth * (window.devicePixelRatio || 1) > 560) src = src.replace('-tilde-800', '-tilde');
+        if (name === 'chrom') {
+          var nmImg = new Image();
+          nmImg.onload = function () { try { nmSet(nmImg); } catch (err) {} };
+          nmImg.src = src.replace(/chrom-tilde(-800)?/, 'chrom-normal');
+        }
+        im.src = src;
       }
       loadNext();
       function size() {
@@ -860,6 +918,19 @@
         }
         gl.uniform1f(uU, uNow);
         gl.uniform1f(uGt, (now - since) / 1000);
+        if (A === 'chrom' || (running && B === 'chrom')) {
+          var tx_, ty_, sec = now / 1000;
+          if (now - mAt < 5000) {
+            if (mDirty || !cRect) { if (!cRect) cRect = c.getBoundingClientRect(); mDirty = false; }
+            tx_ = Math.max(-0.8, Math.min(1.8, (mX - cRect.left) / (cRect.width || 1)));
+            ty_ = Math.max(-0.8, Math.min(1.8, 1 - (mY - cRect.top) / (cRect.height || 1)));
+          } else {
+            tx_ = 0.5 + 0.4 * Math.sin(sec * 0.33); ty_ = 0.6 + 0.22 * Math.sin(sec * 0.21 + 1.2);
+          }
+          var lk = Math.min(1, dt / 1000 * (now - mAt < 5000 ? 9 : 1.5));
+          lx += (tx_ - lx) * lk; ly += (ty_ - ly) * lk; la += (1 - la) * Math.min(1, dt / 1000 * 2.5);
+          gl.uniform3f(uLp, lx, ly, la);
+        } else if (la) { la = 0; gl.uniform3f(uLp, lx, ly, 0); }
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
         if (!live) { live = true; img.classList.add('is-live'); if (altEl) altEl.classList.add('is-live'); }
       }
