@@ -1,4 +1,6 @@
-/* Spielraum: 3D-Fußball auf dem Rasen.
+/* Spielraum: Glaskugel auf dem Rasen (früher ein Fußball, die Physik ist dieselbe geblieben).
+   Die Kugel ist aus Glas in der Akzentfarbe der Seite: Man sieht den Rasen gebrochen durch sie hindurch,
+   oben links sitzt das Glanzlicht, und im Schatten auf dem Rasen liegt der helle Lichtfleck, den das Glas bündelt.
    Der Ball lebt in Bodenkoordinaten (x nach rechts 0..1, y nach hinten 0..ASP, z nach oben).
    Die Abbildung Boden -> Bild (H) ist aus den vier Ecken der Rasenfläche im Foto berechnet,
    deshalb wird der Ball hinten kleiner und bleibt genau auf dem Rasen. */
@@ -54,39 +56,64 @@
     'precision highp float;',
     'uniform vec2 uRes;uniform vec4 uImg;',          /* uImg: x0,y0,w,h des Fotos in Canvas-Pixeln */
     'uniform vec3 uBall;',                            /* Mittelpunkt (px) und Radius (px) */
-    'uniform mat3 uRot;uniform mat3 uHI;',
+    'uniform mat3 uHI;uniform mat3 uH;uniform sampler2D uTex;uniform float uTexOk;uniform vec3 uCol;',
     'uniform vec3 uPos;uniform float uR;uniform float uAsp;uniform float uSink;',
-    'uniform vec3 uN[32];',
     'const vec3 L=vec3(-0.385,-0.128,0.914);',        /* Licht von links oben, leicht von vorn */
     'const vec3 CR=vec3(1.,0.,0.);const vec3 CU=vec3(0.,0.8,0.6);const vec3 CF=vec3(0.,-0.6,0.8);',
     'float h1(float n){return fract(sin(n*127.1)*43758.5453);}',
-    'vec3 pat(vec3 p){',                              /* x: 1 = Fünfeck, y: Naht, z: Abstand zur Naht */
-    '  float a=-9.,c=-9.,ia=0.;',
-    '  for(int i=0;i<32;i++){float w=i<12?0.97416:1.;float s=dot(p,uN[i])*w;',
-    '    if(s>a){c=a;a=s;ia=float(i);}else if(s>c){c=s;}}',
-    '  float d=a-c;',
-    '  return vec3(ia<11.5?1.:0.,1.-smoothstep(0.004,0.011,d),d);',
+    /* Umgebung, die sich im Glas spiegelt: unten der Rasen, oben ein ruhiger Himmel, links oben die Lichtquelle */
+    'vec3 env(vec3 d){',
+    '  vec3 c=mix(vec3(0.07,0.12,0.03),vec3(0.33,0.37,0.43),smoothstep(-0.15,0.5,d.z));',
+    '  float l=max(dot(d,L),0.);',
+    '  return c+vec3(1.,0.98,0.94)*(pow(l,90.)*2.2+pow(l,6.)*0.2);',
+    '}',
+    /* Was die Kugel mit dem Rasen macht. a: Schatten, rgb: Licht, das das Glas zu einem hellen Fleck bündelt */
+    'vec4 lawnFx(vec2 g){',
+    '  float hgt=uPos.z+uR;',
+    '  vec2 ld=normalize(L.xy);',
+    '  vec2 sc=uPos.xy-L.xy/L.z*hgt;',
+    '  vec2 dv=g-sc;float al=dot(dv,ld);vec2 pe=dv-ld*al;',
+    '  float dd=length(vec2(al*L.z,length(pe)))/uR;',
+    '  float blur=0.2+uPos.z*1.1;',
+    '  float sh=(1.-smoothstep(1.-blur,1.+blur,dd))*0.56/(1.+uPos.z*1.5);',      /* Glas lässt Licht durch: heller als ein Ballschatten */
+    '  float cd=length(g-uPos.xy)/uR;',
+    '  sh=max(sh,(1.-smoothstep(0.2,1.15,cd))*0.58*uSink);',
+    '  vec2 cv=g-(sc-ld*uR*0.3);float ca=dot(cv,ld);',
+    '  float cq=length(vec2(ca*L.z,length(cv-ld*ca)))/uR;',
+    '  float cs=exp(-cq*cq/(0.1+uPos.z*1.4))*0.9/(1.+uPos.z*7.);',
+    '  return vec4(mix(vec3(1.),uCol,0.6)*cs,sh*(1.-0.5*cs));',
+    '}',
+    /* Blick aus der Kugel heraus: trifft der Strahl den Rasen, zeigt er das Foto an dieser Stelle */
+    'vec3 lawn(vec3 P,vec3 d){',
+    '  if(d.z>-0.02)return env(d);',
+    '  vec2 g=P.xy+d.xy*(-P.z/d.z);',
+    '  vec3 ip=uH*vec3(g,1.);vec2 iu=ip.xy/ip.z;',
+    '  float ins=step(0.,ip.z)*smoothstep(-0.01,0.01,iu.x)*smoothstep(1.01,0.99,iu.x)*smoothstep(-0.01,0.01,iu.y)*smoothstep(1.01,0.99,iu.y);',
+    '  vec3 c=uTexOk>0.5?texture2D(uTex,clamp(iu,0.,1.)).rgb:vec3(0.16,0.3,0.06);',
+    '  vec4 fx=lawnFx(g);',
+    '  c=c*(1.-fx.a)+fx.rgb;',
+    '  return mix(vec3(0.05,0.06,0.05),c,ins);',
     '}',
     'vec3 shade(vec2 uv,out float cov){',
     '  float r2=dot(uv,uv);cov=1.-smoothstep(1.-2.4/uBall.z,1.,sqrt(r2));',
     '  if(r2>1.)return vec3(0.);',
     '  float w=sqrt(1.-r2);',
     '  vec3 n=uv.x*CR+uv.y*CU+w*CF;',
-    '  vec3 q=pat(uRot*n);',
-    '  vec3 white=vec3(0.90,0.90,0.875);vec3 dark=vec3(0.055,0.058,0.06);',
-    '  vec3 alb=mix(white,dark,q.x);',
-    '  alb=mix(alb,alb*0.35+vec3(0.015),q.y);',
-    /* weiche Wölbung der Felder zur Naht hin */
-    '  float puff=smoothstep(0.011,0.05,q.z);',
-    '  float dif=max(dot(n,L),0.);float wrap=max(dot(n,L)*0.6+0.4,0.);',
-    '  vec3 hv=normalize(L+CF);float sp=pow(max(dot(n,hv),0.),48.)*(0.22+0.2*q.x)*(0.5+0.5*puff);',
-    '  float sky=n.z*0.5+0.5;',
-    '  vec3 amb=mix(vec3(0.105,0.16,0.035),vec3(0.20,0.215,0.225),sky);',   /* unten Grün vom Rasen */
-    '  vec3 col=alb*(vec3(1.0,0.985,0.95)*(dif*0.74+wrap*0.16)+amb*0.9)*(0.86+0.14*puff)+sp;',
-    /* Kontaktschatten am Boden, nur wenn der Ball unten liegt */
-    '  float ao=mix(1.,smoothstep(-1.,-0.15,n.z)*0.75+0.25,uSink);',
-    '  col*=ao;',
-    '  col*=0.9+0.1*w;',
+    '  vec3 I=-CF;',
+    /* Der Sehstrahl wird beim Eintritt gebrochen, läuft durch das Glas und tritt hinten wieder aus */
+    '  vec3 t1=refract(I,n,1./1.5);',
+    '  float len=-2.*dot(t1,n);',
+    '  vec3 p2=n+t1*len;',
+    '  vec3 t2=refract(t1,-p2,1.5);if(dot(t2,t2)<0.5)t2=reflect(t1,-p2);',
+    '  vec3 tr=lawn(vec3(uPos.xy,uPos.z+uR)+uR*p2,t2);',
+    '  tr*=pow(uCol,vec3(0.3+0.8*len));',                               /* je länger der Weg im Glas, desto satter die Farbe */
+    /* Licht, das von links oben durch die Kugel fällt, sammelt sich auf der abgewandten Innenseite */
+    '  tr+=uCol*(pow(max(dot(p2,-L),0.),5.)*0.8+0.07);',
+    '  float F=0.04+0.96*pow(1.-w,5.);',
+    '  vec3 col=mix(tr,env(reflect(I,n)),F);',
+    '  vec3 hv=normalize(L+CF);col+=vec3(1.)*pow(max(dot(n,hv),0.),240.)*1.3;',   /* Glanzlicht */
+    /* unten sitzt die Kugel im Rasen: leichter Kontaktschatten */
+    '  col*=mix(1.,smoothstep(-1.,-0.15,n.z)*0.5+0.5,uSink);',
     '  return col;',
     '}',
     'void main(){',
@@ -95,18 +122,9 @@
     /* Schatten auf dem Rasen */
     '  vec2 ip=(fc-uImg.xy)/uImg.zw;',
     '  vec3 gp=uHI*vec3(ip,1.);vec2 g=gp.xy/gp.z;',
-    '  float hgt=uPos.z+uR;',
-    '  vec2 sc=uPos.xy-L.xy/L.z*hgt;',
-    '  vec2 dv=g-sc;vec2 ld=normalize(L.xy);',
-    '  float al=dot(dv,ld);vec2 pe=dv-ld*al;',
-    '  float dd=length(vec2(al*L.z,length(pe)))/uR;',
-    '  float blur=0.2+uPos.z*1.1;',
-    '  float sh=(1.-smoothstep(1.-blur,1.+blur,dd))*0.66/(1.+uPos.z*1.5);',
-    '  float cd=length((g-uPos.xy)*vec2(1.,1.))/uR;',
-    '  sh=max(sh,(1.-smoothstep(0.2,1.15,cd))*0.68*uSink);',
     '  float inl=smoothstep(-0.01,0.02,g.x)*smoothstep(1.01,0.98,g.x)*smoothstep(-0.02,0.015,g.y)*smoothstep(uAsp+0.01,uAsp-0.02,g.y);',
-    '  sh*=inl*step(0.,gp.z);',
-    '  outa=sh;',
+    '  vec4 fx=lawnFx(g)*inl*step(0.,gp.z);',
+    '  outc=fx.rgb;outa=fx.a;',
     /* Ball */
     '  vec2 d=(fc-uBall.xy)/uBall.z;d.y=-d.y;',
     '  if(dot(d,d)<1.08){',
@@ -122,7 +140,7 @@
     '    float edge=-0.89+tip*0.2-(1.-uSink)*0.6;',
     '    float gm=smoothstep(edge-0.05,edge+0.05,d.y);',
     '    ca*=gm;',
-    '    outc=acc*ca;outa=ca+outa*(1.-ca);',
+    '    outc=acc*ca+outc*(1.-ca);outa=ca+outa*(1.-ca);',
     '  }',
     '  gl_FragColor=vec4(outc,outa);',
     '}'
@@ -141,29 +159,46 @@
   var la = gl.getAttribLocation(pr, 'a');
   gl.enableVertexAttribArray(la); gl.vertexAttribPointer(la, 2, gl.FLOAT, false, 0, 0);
   var U = {};
-  ['uRes', 'uImg', 'uBall', 'uRot', 'uHI', 'uPos', 'uR', 'uAsp', 'uSink', 'uN'].forEach(function (n) { U[n] = gl.getUniformLocation(pr, n); });
+  ['uRes', 'uImg', 'uBall', 'uHI', 'uH', 'uPos', 'uR', 'uAsp', 'uSink', 'uTex', 'uTexOk', 'uCol'].forEach(function (n) { U[n] = gl.getUniformLocation(pr, n); });
 
-  /* Fußballmuster: 12 Fünfecke (Ecken eines Ikosaeders) + 20 Sechsecke (dessen Flächenmitten) */
+  /* Das Rasenfoto als Bild auf der Grafikkarte: Die Kugel zeigt es gebrochen in ihrem Inneren */
+  gl.uniform1i(U.uTex, 0); gl.uniform1f(U.uTexOk, 0);
   (function () {
-    var t = (1 + Math.sqrt(5)) / 2, v = [], i, j, k;
-    [[0, 1, t], [0, -1, t], [0, 1, -t], [0, -1, -t]].forEach(function (p) {
-      v.push([p[0], p[1], p[2]], [p[1], p[2], p[0]], [p[2], p[0], p[1]]);
-    });
-    function nrm(p) { var l = Math.sqrt(p[0]*p[0]+p[1]*p[1]+p[2]*p[2]); return [p[0]/l, p[1]/l, p[2]/l]; }
-    function d2(a, c) { return (a[0]-c[0])*(a[0]-c[0]) + (a[1]-c[1])*(a[1]-c[1]) + (a[2]-c[2])*(a[2]-c[2]); }
-    var out = v.map(nrm), f = [];
-    for (i = 0; i < 12; i++) for (j = i + 1; j < 12; j++) for (k = j + 1; k < 12; k++) {
-      if (d2(v[i], v[j]) < 4.1 && d2(v[j], v[k]) < 4.1 && d2(v[i], v[k]) < 4.1) {
-        f.push(nrm([v[i][0]+v[j][0]+v[k][0], v[i][1]+v[j][1]+v[k][1], v[i][2]+v[j][2]+v[k][2]]));
-      }
+    var im = media.querySelector('img');
+    if (!im) return;
+    function up() {
+      try {
+        var tex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, im);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.uniform1f(U.uTexOk, 1);
+        draw();
+      } catch (err) {}
     }
-    out = out.concat(f);
-    var flat = new Float32Array(96);
-    for (i = 0; i < 32; i++) { flat[i*3] = out[i][0]; flat[i*3+1] = out[i][1]; flat[i*3+2] = out[i][2]; }
-    gl.uniform3fv(U.uN, flat);
+    if (im.complete && im.naturalWidth) up(); else im.addEventListener('load', up, { once: true });
   })();
+  /* Glasfarbe je Material der Tilde; beim Wechsel blendet sie weich über */
+  var GLASS = { moos: [0.62, 0.80, 0.10], gold: [0.92, 0.64, 0.16], fell: [0.36, 0.66, 0.96], chrom: [0.80, 0.84, 0.90] };
+  function glassNow() { return GLASS[document.documentElement.getAttribute('data-mat')] || GLASS.moos; }
+  var col = glassNow().slice(), colTo = col, colRaf = 0;
+  function colStep() {
+    colRaf = 0;
+    var d = 0, i;
+    for (i = 0; i < 3; i++) { col[i] += (colTo[i] - col[i]) * 0.07; d += Math.abs(colTo[i] - col[i]); }
+    if (d < 0.004 || !visible) col = colTo.slice(); else colRaf = requestAnimationFrame(colStep);
+    if (visible && !running) draw();
+  }
+  if ('MutationObserver' in window) {
+    new MutationObserver(function () { colTo = glassNow(); if (!colRaf) colRaf = requestAnimationFrame(colStep); })
+      .observe(document.documentElement, { attributes: true, attributeFilter: ['data-mat'] });
+  }
   /* mat3 spaltenweise */
   gl.uniformMatrix3fv(U.uHI, false, new Float32Array([HI[0], HI[3], HI[6], HI[1], HI[4], HI[7], HI[2], HI[5], HI[8]]));
+  gl.uniformMatrix3fv(U.uH, false, new Float32Array([H[0], H[3], H[6], H[1], H[4], H[7], H[2], H[5], H[8]]));
   gl.uniform1f(U.uAsp, ASP);
   gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
   gl.clearColor(0, 0, 0, 0);
@@ -182,16 +217,12 @@
 
   function draw() {
     if (!cw) return;
-    var s = screenBall(), q = b.q, w = q[0], x = q[1], y = q[2], z = q[3];
+    var s = screenBall();
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.uniform2f(U.uRes, cw, ch);
     gl.uniform4f(U.uImg, imgRect[0], imgRect[1], imgRect[2], imgRect[3]);
     gl.uniform3f(U.uBall, imgRect[0] + s.x * imgRect[2], imgRect[1] + s.y * imgRect[3], s.r * imgRect[2]);
-    /* Welt -> Ball (Transponierte der Drehmatrix), spaltenweise übergeben */
-    gl.uniformMatrix3fv(U.uRot, false, new Float32Array([
-      1 - 2*(y*y + z*z), 2*(x*y - w*z), 2*(x*z + w*y),
-      2*(x*y + w*z), 1 - 2*(x*x + z*z), 2*(y*z - w*x),
-      2*(x*z - w*y), 2*(y*z + w*x), 1 - 2*(x*x + y*y)]));
+    gl.uniform3f(U.uCol, col[0], col[1], col[2]);
     gl.uniform3f(U.uPos, b.x, b.y, b.z * s.k); gl.uniform1f(U.uR, R * s.k);
     gl.uniform1f(U.uSink, Math.max(0, 1 - b.z / 0.05));
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
